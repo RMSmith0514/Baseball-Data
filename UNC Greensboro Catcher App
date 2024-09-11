@@ -1,0 +1,270 @@
+# package installation
+{
+  library(shiny)
+  library(dplyr)
+  library(DT)
+  library(ggplot2)
+  library(gt)
+  library(scales)
+  library(shinyWidgets)
+  library(tidyverse)
+  library(readr)
+  library(cowplot)
+  library(gtsummary)
+  library(ggrepel)
+  library(tibble)
+}
+
+# data file prep
+{
+  Overall_Data_File <- UNCG_Overall_Data %>% 
+    filter(CatcherTeam == "UNC_SPA") %>% 
+    mutate(RelHeight = substr(RelHeight, 1, nchar(RelHeight)), 
+           RelHeight = as.double(RelHeight),
+           Balls = substr(Balls, 1, nchar(Balls)), 
+           Balls = as.double(Balls),
+           Strikes = substr(Strikes, 1, nchar(Strikes)), 
+           Strikes = as.double(Strikes))
+  
+  Overall_Data_File <- Overall_Data_File %>%
+    mutate(HCheck = case_when(PlayResult %in% c('Single', 'Double', 'Triple', 'HomeRun') ~ TRUE, TRUE ~ FALSE),
+           GBCheck = case_when(TaggedHitType %in% c('GroundBall') ~ TRUE, TRUE ~ FALSE),
+           BBECheck = case_when(TaggedHitType %in% c('GroundBall', 'LineDrive', 'FlyBall', 'Popup') ~ TRUE, TRUE ~ FALSE), 
+           SwingCheck = case_when(PitchCall %in% c('FoulBall', 'StrikeSwinging','InPlay') ~ TRUE, TRUE ~ FALSE),
+           TakeCheck = case_when(PitchCall %in% c('StrikeCalled', 'BallCalled') ~ TRUE, TRUE ~ FALSE),
+           WhiffCheck = case_when(PitchCall %in% c('StrikeSwinging') ~ TRUE, TRUE ~ FALSE),
+           CSCheck = case_when(PitchCall %in% c('StrikeCalled') ~ TRUE, TRUE ~ FALSE),
+           StrikeCheck = case_when(PitchCall %in% c('StrikeSwinging', 'FoulBall', 'InPlay','StrikeCalled') ~ TRUE, TRUE ~ FALSE),
+           ZoneCheck = case_when(between(PlateLocHeight, 1.59, 3.41) & between(PlateLocSide, -1, 1) ~ TRUE, TRUE ~ FALSE),
+           Zone1Check = case_when(between(PlateLocHeight, 2.81, 3.41) & between(PlateLocSide, -1, -.33) ~ TRUE, TRUE ~ FALSE),
+           Zone2Check = case_when(between(PlateLocHeight, 2.81, 3.41) & between(PlateLocSide, -.33, .33) ~ TRUE, TRUE ~ FALSE),
+           Zone3Check = case_when(between(PlateLocHeight, 2.81, 3.41) & between(PlateLocSide, .33, 1) ~ TRUE, TRUE ~ FALSE),
+           Zone4Check = case_when(between(PlateLocHeight, 2.2, 2.81) & between(PlateLocSide, -1, -.33) ~ TRUE, TRUE ~ FALSE),
+           Zone5Check = case_when(between(PlateLocHeight, 2.2, 2.81) & between(PlateLocSide, -.33, .33) ~ TRUE, TRUE ~ FALSE),
+           Zone6Check = case_when(between(PlateLocHeight, 2.2, 2.81) & between(PlateLocSide, .33, 1) ~ TRUE, TRUE ~ FALSE),
+           Zone7Check = case_when(between(PlateLocHeight, 1.59, 2.2) & between(PlateLocSide, -1, -.33) ~ TRUE, TRUE ~ FALSE),
+           Zone8Check = case_when(between(PlateLocHeight, 1.59, 2.2) & between(PlateLocSide,-.33, .33) ~ TRUE, TRUE ~ FALSE),
+           Zone9Check = case_when(between(PlateLocHeight, 1.59, 2.2) & between(PlateLocSide, .33, 1) ~ TRUE, TRUE ~ FALSE),
+           Zone10Check = case_when(between(PlateLocHeight, 3.41, 4.01) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+           Zone11Check = case_when(between(PlateLocHeight, 3.41, 4.01) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+           Zone12Check = case_when(between(PlateLocHeight, 2.5, 3.41) & between(PlateLocSide, -1.6, -1) ~ TRUE, TRUE ~ FALSE),
+           Zone13Check = case_when(between(PlateLocHeight, 1.59, 2.5) & between(PlateLocSide, -1.6, -1) ~ TRUE, TRUE ~ FALSE),
+           Zone14Check = case_when(between(PlateLocHeight, 2.5, 3.41) & between(PlateLocSide, 1.0, 1.6) ~ TRUE, TRUE ~ FALSE),
+           Zone15Check = case_when(between(PlateLocHeight, 1.59, 2.5) & between(PlateLocSide, 1.0, 1.6) ~ TRUE, TRUE ~ FALSE),
+           Zone16Check = case_when(between(PlateLocHeight, .89, 1.59) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+           Zone17Check = case_when(between(PlateLocHeight, .89, 1.59) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+           PitchZone = Zone1Check + 2*Zone2Check + 3*Zone3Check + 4*Zone4Check + 5*Zone5Check +
+             6*Zone6Check + 7*Zone7Check + 8*Zone8Check + 9*Zone9Check + 10*Zone10Check +
+             11*Zone11Check + 12*Zone12Check + 13*Zone13Check + 14*Zone14Check +
+             15*Zone15Check + 16*Zone16Check + 17*Zone17Check,
+           PrimeCheck = case_when(between(PlateLocHeight, 2, 2.8) & between(PlateLocSide, -.5, .5) ~ TRUE, TRUE ~ FALSE),
+           CompetitiveCheck = case_when(between(PlateLocHeight, 1, 4) & between(PlateLocSide, -1.4, 1.4) ~ TRUE, TRUE ~ FALSE),
+           SweetSpotCheck = case_when(between(Angle, 10, 30) ~ TRUE, TRUE ~ FALSE),
+           HardHitCheck = case_when(between(ExitSpeed, 93, 120) ~ TRUE, TRUE ~ FALSE),
+           BarrelCheck = case_when(between(Angle, 10, 30)  & between(ExitSpeed, 93, 120) ~ TRUE, TRUE ~ FALSE),
+           WhiffCheck = case_when(PitchCall %in% c('StrikeSwinging') ~ TRUE, TRUE ~ FALSE),
+           SwingCheck = case_when(PitchCall %in% c('StrikeSwinging', 'InPlay','FoulBall') ~ TRUE, TRUE ~ FALSE),
+           CalledStrikeCheck = case_when(PitchCall %in% c('StrikeCalled') ~ TRUE, TRUE ~ FALSE),
+           BallCheck = case_when(PitchCall %in% c('BallCalled', 'HitByPitch') ~ TRUE, TRUE ~ FALSE),
+           FoulCheck = case_when(PitchCall %in% c('FoulBall') ~ TRUE, TRUE ~ FALSE),
+           SingleCheck = case_when(PlayResult %in% c('Single') ~ TRUE, TRUE ~ FALSE),
+           DoubleCheck = case_when(PlayResult %in% c('Double') ~ TRUE, TRUE ~ FALSE),
+           TripleCheck = case_when(PlayResult %in% c('Triple') ~ TRUE, TRUE ~ FALSE),
+           HRCheck = case_when(PlayResult %in% c('HomeRun') ~ TRUE, TRUE ~ FALSE),
+           SacCheck = case_when(PlayResult %in% c('Sacrifice') ~ TRUE, TRUE ~ FALSE),
+           HBPCheck = case_when(PitchCall %in% c('HitByPitch') ~ TRUE, TRUE ~ FALSE),
+           StrikeoutCheck = case_when(KorBB %in% c('Strikeout') ~ TRUE, TRUE ~ FALSE),
+           WalkCheck = case_when(KorBB %in% c('Walk') ~ TRUE, TRUE ~ FALSE),
+           BIPCheck = case_when(PlayResult %in% c('Undefined') ~ FALSE, TRUE ~ TRUE), 
+           ErrorCheck = if_else(PlayResult %in% c('Error'), TRUE, FALSE),
+           ABCheck = StrikeoutCheck + BIPCheck - SacCheck,
+           PACheck = StrikeoutCheck + WalkCheck + HBPCheck + BIPCheck,
+           ChaseCheck = case_when(SwingCheck %in% c('TRUE') & ZoneCheck %in% c('FALSE') ~ TRUE, TRUE ~ FALSE),
+           FPCheck = case_when(PitchofPA %in% 1 ~ TRUE, TRUE ~ FALSE),
+           TwoStrikeCheck = case_when(Strikes %in% 2 ~ TRUE, TRUE ~ FALSE)
+    )
+  
+  
+  BACONCSV <- Overall_Data_File %>% 
+    mutate(floorExitSpeed = floor(ExitSpeed),
+           floorLaunchAngle = trunc(Angle),) %>% 
+    left_join(BACON, by = c("floorExitSpeed" = "launch_speed", 
+                            "floorLaunchAngle" = "launch_angle"))
+  
+  strike_exp_data <- BACONCSV %>%  
+    mutate(RoundedPLH = round(PlateLocHeight, digits = 1),
+           RoundedPLS = round(PlateLocSide, digits = 1)) %>% 
+    left_join(umpire_data, by = c("RoundedPLH" = "PlateLocHeight",
+                                  "RoundedPLS" = "PlateLocSide"))
+  
+  strike_exp_diff <- strike_exp_data %>% 
+    mutate(strike_exp_diff = abs(StrikeCheck - called_strike_prob))
+  
+  Overall_Data_File <- strike_exp_diff %>%
+    mutate(across("av_xwOBAcon", ~replace_na(., 0)),
+           across("strike_exp_diff", ~replace_na(., 0)),
+           xwOBAvalues = av_xwOBAcon + WalkCheck * 0.83 + HBPCheck * 0.86 + StrikeoutCheck * 0)
+  
+  Catcher_Data <- Overall_Data_File %>%
+    filter(SwingCheck == FALSE) %>%
+    mutate(CScore = (((1-called_strike_prob)*StrikeCheck) - called_strike_prob*BallCheck))
+  
+}
+
+# ui
+{
+  ui <- fluidPage(
+    titlePanel("UNCG Catching"),
+    sidebarLayout(
+      sidebarPanel(
+        selectInput(inputId = "CatcherInput", label = "Select Catcher", 
+                    choices = sort(unique(Overall_Data_File$Catcher))),
+        img(src = "https://upload.wikimedia.org/wikipedia/commons/b/be/UNC_Greensboro_Spartans_logo.svg", 
+            style = "display: block; margin-left: auto; margin-right: auto;", height = 150, width = 150)
+      ),
+      mainPanel(
+        tabsetPanel(
+          tabPanel("Pitches", br(), 
+                   selectInput(inputId = "SideInput1", label = "Select Pitcher Side", 
+                               choices = c(All = "All", sort(unique(Overall_Data_File$PitcherThrows)))),
+                   plotOutput('All_Pitches')
+          ),
+          tabPanel("Catch Plots", br(), 
+                   selectInput(inputId = "SideInput2", label = "Select Pitcher Side", 
+                               choices = c(All = "All", sort(unique(Overall_Data_File$PitcherThrows)))),
+                   plotOutput("Called_Strike_Plot"),
+                   plotOutput("Called_Ball_Plot")
+                   ),
+          tabPanel("Catching Reports", br(), 
+                   dataTableOutput("CatcherTable")
+          )
+        )
+      )
+    )
+  )
+}
+
+server <- function(input, output, session) {
+  # All Pitches
+  output$All_Pitches <- renderPlot({
+    
+    if(input$SideInput1 != "All"){
+      
+      dataFilter <- reactive({
+        Catcher_Data %>%
+          filter(Catcher == input$CatcherInput, PitcherThrows == input$SideInput1)
+      })  
+    } else {
+      dataFilter <- reactive({
+        Catcher_Data %>%
+          filter(Catcher == input$CatcherInput)
+      })}
+    
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "All Pitches") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # Called Strikes
+  output$Called_Strike_Plot <- renderPlot({
+    
+    if(input$SideInput2 != "All"){
+      
+      dataFilter <- reactive({
+        Catcher_Data %>%
+          filter(Catcher == input$CatcherInput, PitcherThrows == input$SideInput2, CSCheck == TRUE, called_strike_prob < .41)
+      })  
+    } else {
+      dataFilter <- reactive({
+        Catcher_Data %>%
+          filter(Catcher == input$CatcherInput, CSCheck == TRUE, called_strike_prob < .41)
+      })}
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "Stolen Strikes") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # Called Balls
+  output$Called_Ball_Plot <- renderPlot({
+    
+    if(input$SideInput2 != "All"){
+      
+      dataFilter <- reactive({
+        Catcher_Data %>%
+          filter(Catcher == input$CatcherInput, PitcherThrows == input$SideInput2, CSCheck == FALSE, called_strike_prob > .59)
+      })  
+    } else {
+      dataFilter <- reactive({
+        Catcher_Data %>%
+          filter(Catcher == input$CatcherInput, CSCheck == FALSE, called_strike_prob > .59)
+      })}
+    
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "Lost Strikes") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # Catcher Report Numbers
+  output$CatcherTable <- renderDataTable({
+    
+    dataFilter <- reactive({
+      Catcher_Data %>%
+        filter(Catcher == input$CatcherInput)
+    })
+    
+    catcher_table <- dataFilter() %>%
+      summarize('Pitches' = n(),
+                StrikesGained = sum(StrikeCheck[called_strike_prob < .41], na.rm = TRUE),
+                StrikesLost = sum(BallCheck[called_strike_prob > .59], na.rm = TRUE),
+                CatcherScore = sum(CScore, na.rm = TRUE)) %>%
+                  mutate(CatcherScore = sprintf("%.1f", CatcherScore)) %>%
+                  select(Pitches, StrikesGained, StrikesLost, CatcherScore)
+                
+    
+    catcher_table[is.na(catcher_table)] <- "-"
+    
+    tableFilter <- reactive({catcher_table})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+      
+  })
+  
+  session$onSessionEnded(function() { stopApp() })
+
+}
+
+
+shinyApp(ui, server)
