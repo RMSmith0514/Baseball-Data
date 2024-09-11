@@ -1,0 +1,4871 @@
+# package installation
+{
+library(shiny)
+library(dplyr)
+library(DT)
+library(ggplot2)
+library(gt)
+library(scales)
+library(shinyWidgets)
+library(tidyverse)
+library(readr)
+library(cowplot)
+library(gtsummary)
+library(ggrepel)
+library(tibble)
+}
+
+
+
+# CSVs just in case
+{
+  BACON <- xwOBAcon
+  umpire_data <- called_strike
+}
+
+# data file prep
+{
+Overall_Data_File <- UNCG_Overall_Data %>% 
+    filter(PitcherTeam == 'UNC_SPA') %>% 
+  mutate(RelHeight = substr(RelHeight, 1, nchar(RelHeight)), 
+         RelHeight = as.double(RelHeight),
+         Balls = substr(Balls, 1, nchar(Balls)), 
+         Balls = as.double(Balls),
+         Strikes = substr(Strikes, 1, nchar(Strikes)), 
+         Strikes = as.double(Strikes))
+  
+Overall_Data_File$Count <- paste(Overall_Data_File$Balls, Overall_Data_File$Strikes, sep = "-")
+
+Overall_Data_File <- Overall_Data_File %>%
+  mutate(HCheck = case_when(PlayResult %in% c('Single', 'Double', 'Triple', 'HomeRun') ~ TRUE, TRUE ~ FALSE),
+         GBCheck = case_when(TaggedHitType %in% c('GroundBall') ~ TRUE, TRUE ~ FALSE),
+         FBCheck = case_when(TaggedHitType %in% c('FlyBall') ~ TRUE, TRUE ~ FALSE),
+         BBECheck = case_when(TaggedHitType %in% c('GroundBall', 'LineDrive', 'FlyBall', 'Popup') ~ TRUE, TRUE ~ FALSE), 
+         SwingCheck = case_when(PitchCall %in% c('FoulBall', 'StrikeSwinging','InPlay') ~ TRUE, TRUE ~ FALSE),
+         WhiffCheck = case_when(PitchCall %in% c('StrikeSwinging') ~ TRUE, TRUE ~ FALSE),
+         CSCheck = case_when(PitchCall %in% c('StrikeCalled') ~ TRUE, TRUE ~ FALSE),
+         StrikeCheck = case_when(PitchCall %in% c('StrikeSwinging', 'FoulBall', 'InPlay','StrikeCalled') ~ TRUE, TRUE ~ FALSE),
+         ZoneCheck = case_when(between(PlateLocHeight, 1.59, 3.41) & between(PlateLocSide, -1, 1) ~ TRUE, TRUE ~ FALSE),
+         Zone1Check = case_when(between(PlateLocHeight, 2.81, 3.41) & between(PlateLocSide, -1, -.33) ~ TRUE, TRUE ~ FALSE),
+         Zone2Check = case_when(between(PlateLocHeight, 2.81, 3.41) & between(PlateLocSide, -.33, .33) ~ TRUE, TRUE ~ FALSE),
+         Zone3Check = case_when(between(PlateLocHeight, 2.81, 3.41) & between(PlateLocSide, .33, 1) ~ TRUE, TRUE ~ FALSE),
+         Zone4Check = case_when(between(PlateLocHeight, 2.2, 2.81) & between(PlateLocSide, -1, -.33) ~ TRUE, TRUE ~ FALSE),
+         Zone5Check = case_when(between(PlateLocHeight, 2.2, 2.81) & between(PlateLocSide, -.33, .33) ~ TRUE, TRUE ~ FALSE),
+         Zone6Check = case_when(between(PlateLocHeight, 2.2, 2.81) & between(PlateLocSide, .33, 1) ~ TRUE, TRUE ~ FALSE),
+         Zone7Check = case_when(between(PlateLocHeight, 1.59, 2.2) & between(PlateLocSide, -1, -.33) ~ TRUE, TRUE ~ FALSE),
+         Zone8Check = case_when(between(PlateLocHeight, 1.59, 2.2) & between(PlateLocSide,-.33, .33) ~ TRUE, TRUE ~ FALSE),
+         Zone9Check = case_when(between(PlateLocHeight, 1.59, 2.2) & between(PlateLocSide, .33, 1) ~ TRUE, TRUE ~ FALSE),
+         Zone10Check = case_when(between(PlateLocHeight, 3.41, 4.01) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+         Zone11Check = case_when(between(PlateLocHeight, 3.41, 4.01) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         Zone12Check = case_when(between(PlateLocHeight, 2.5, 3.41) & between(PlateLocSide, -1.6, -1) ~ TRUE, TRUE ~ FALSE),
+         Zone13Check = case_when(between(PlateLocHeight, 1.59, 2.5) & between(PlateLocSide, -1.6, -1) ~ TRUE, TRUE ~ FALSE),
+         Zone14Check = case_when(between(PlateLocHeight, 2.5, 3.41) & between(PlateLocSide, 1.0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         Zone15Check = case_when(between(PlateLocHeight, 1.59, 2.5) & between(PlateLocSide, 1.0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         Zone16Check = case_when(between(PlateLocHeight, .89, 1.59) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+         Zone17Check = case_when(between(PlateLocHeight, .89, 1.59) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         PitchZone = Zone1Check + 2*Zone2Check + 3*Zone3Check + 4*Zone4Check + 5*Zone5Check +
+           6*Zone6Check + 7*Zone7Check + 8*Zone8Check + 9*Zone9Check + 10*Zone10Check +
+           11*Zone11Check + 12*Zone12Check + 13*Zone13Check + 14*Zone14Check +
+           15*Zone15Check + 16*Zone16Check + 17*Zone17Check,
+         UpperHalfCheck = case_when(between(PlateLocHeight, 2.5, 4.01) & between(PlateLocSide, -1.6, 1.6) ~ TRUE, TRUE ~ FALSE),
+         LowerHalfCheck = case_when(between(PlateLocHeight, .89, 2.5) & between(PlateLocSide, -1.6, 1.6) ~ TRUE, TRUE ~ FALSE),
+         RightHalfCheck = case_when(between(PlateLocHeight, .89, 4.01) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         LeftHalfCheck = case_when(between(PlateLocHeight, .89, 4.01) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+         UpRightCheck = case_when(between(PlateLocHeight, 2.5, 4.01) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         UpLeftCheck = case_when(between(PlateLocHeight, 2.5, 4.01) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+         BottomRightCheck = case_when(between(PlateLocHeight, .89, 2.5) & between(PlateLocSide, 0, 1.6) ~ TRUE, TRUE ~ FALSE),
+         BottomLeftCheck = case_when(between(PlateLocHeight, .89, 2.5) & between(PlateLocSide, -1.6, 0) ~ TRUE, TRUE ~ FALSE),
+         PitchQuadCheck = ifelse(UpRightCheck, "Up/3B Side", ifelse(UpLeftCheck, "Up/1B Side", ifelse(BottomRightCheck, "Down/3B Side", ifelse(BottomLeftCheck, "Down/1B Side", "Not Close")))),
+         SweetSpotCheck = case_when(between(Angle, 10, 30) ~ TRUE, TRUE ~ FALSE),
+         HardHitCheck = case_when(between(ExitSpeed, 95, 120) ~ TRUE, TRUE ~ FALSE),
+         BarrelCheck = case_when(between(Angle, 10, 30)  & between(ExitSpeed, 95, 120) ~ TRUE, TRUE ~ FALSE),
+         WhiffCheck = case_when(PitchCall %in% c('StrikeSwinging') ~ TRUE, TRUE ~ FALSE),
+         SwingCheck = case_when(PitchCall %in% c('StrikeSwinging', 'InPlay','FoulBall') ~ TRUE, TRUE ~ FALSE),
+         CalledStrikeCheck = case_when(PitchCall %in% c('StrikeCalled') ~ TRUE, TRUE ~ FALSE),
+         BallCheck = case_when(PitchCall %in% c('BallCalled', 'HitByPitch') ~ TRUE, TRUE ~ FALSE),
+         FoulCheck = case_when(PitchCall %in% c('FoulBall') ~ TRUE, TRUE ~ FALSE),
+         SingleCheck = case_when(PlayResult %in% c('Single') ~ TRUE, TRUE ~ FALSE),
+         DoubleCheck = case_when(PlayResult %in% c('Double') ~ TRUE, TRUE ~ FALSE),
+         TripleCheck = case_when(PlayResult %in% c('Triple') ~ TRUE, TRUE ~ FALSE),
+         HRCheck = case_when(PlayResult %in% c('HomeRun') ~ TRUE, TRUE ~ FALSE),
+         SacCheck = case_when(PlayResult %in% c('Sacrifice') ~ TRUE, TRUE ~ FALSE),
+         HBPCheck = case_when(PitchCall %in% c('HitByPitch') ~ TRUE, TRUE ~ FALSE),
+         StrikeoutCheck = case_when(KorBB %in% c('Strikeout') ~ TRUE, TRUE ~ FALSE),
+         WalkCheck = case_when(KorBB %in% c('Walk') ~ TRUE, TRUE ~ FALSE),
+         BIPCheck = case_when(PitchCall %in% c('InPlay') ~ TRUE, TRUE ~ FALSE), 
+         ErrorCheck = if_else(PlayResult %in% c('Error'), TRUE, FALSE),
+         EvenCountCheck = case_when(Count %in% c('0-0', '1-1', '2-2') ~ TRUE, TRUE ~ FALSE),
+         PCountCheck = case_when(Count %in% c('0-1', '0-2', '1-2') ~ TRUE, TRUE ~ FALSE),
+         HCountCheck = case_when(Count %in% c('1-0', '2-0', '2-1', '3-1', '3-0') ~ TRUE, TRUE ~ FALSE),
+         FullCountCheck = case_when(Count %in% c('3-2') ~ TRUE, TRUE ~ FALSE),
+         TwoStrikeCheck = case_when(Strikes %in% 2 ~ TRUE, TRUE ~ FALSE),
+         CountLeverage = ifelse(PCountCheck, "Ahead", ifelse(HCountCheck, "Behind", ifelse(EvenCountCheck, "Even", "Full"))),
+         ABCheck = StrikeoutCheck + BIPCheck - SacCheck,
+         PACheck = StrikeoutCheck + WalkCheck + HBPCheck + BIPCheck,
+         FPCheck = case_when(PitchofPA %in% 1 ~ TRUE, TRUE ~ FALSE),
+         Ball3Pitch = case_when(Balls %in% 3 ~ TRUE, TRUE ~ FALSE),
+         Ball3Check = case_when(Balls %in% 3 & PACheck %in% 1 ~ TRUE, TRUE ~ FALSE),
+         R2KWin = case_when(Count %in% c('0-1', '1-1') & PitchCall %in% c('StrikeCalled', 'StrikeSwinging', 'FoulBall') ~ TRUE, TRUE ~ FALSE),
+         R2KLoss = case_when(Count %in% c('1-0', '1-1') & PitchCall %in% c('BallCalled') ~ TRUE, TRUE ~ FALSE),
+         VAA_Zone_Adj = -11.1-1.054*RelHeight+.099*InducedVertBreak+.085*RelSpeed-.005*Extension+1.051*2.5,
+         HAA_Zone_Adj = -1.072*RelSide+.099*HorzBreak
+         )
+
+
+
+BACONCSV <- Overall_Data_File %>% 
+  mutate(floorExitSpeed = floor(ExitSpeed),
+         floorLaunchAngle = trunc(Angle),) %>% 
+  left_join(BACON, by = c("floorExitSpeed" = "launch_speed", 
+                          "floorLaunchAngle" = "launch_angle"))
+
+strike_exp_data <- BACONCSV %>%  
+  mutate(RoundedPLH = round(PlateLocHeight, digits = 1),
+         RoundedPLS = round(PlateLocSide, digits = 1)) %>% 
+  left_join(umpire_data, by = c("RoundedPLH" = "PlateLocHeight",
+                                "RoundedPLS" = "PlateLocSide"))
+
+strike_exp_diff <- strike_exp_data %>% 
+  mutate(strike_exp_diff = abs(StrikeCheck - called_strike_prob))
+
+Overall_Data_File <- strike_exp_diff %>%
+  mutate(across("av_xwOBAcon", ~replace_na(., 0)),
+         across("strike_exp_diff", ~replace_na(., 0)),
+         xwOBAvalues = av_xwOBAcon + WalkCheck * 0.83 + HBPCheck * 0.86 + StrikeoutCheck * 0,
+         CompetitiveCheck = case_when((called_strike_prob > .19) ~ TRUE, TRUE ~ FALSE))
+
+}
+
+# user interface
+{
+ui <- fluidPage(
+  titlePanel("UNCG Pitching"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput(inputId = "PitcherInput", label = "Select Pitcher", 
+              choices = sort(unique(Overall_Data_File$Pitcher))),
+      selectInput(inputId = "YearInput", label = "Select Year",
+                  choices = c(All = 'All', sort(unique(Overall_Data_File$DateYear)))),
+      img(src = "https://upload.wikimedia.org/wikipedia/commons/b/be/UNC_Greensboro_Spartans_logo.svg", 
+          style = "display: block; margin-left: auto; margin-right: auto;", height = 150, width = 150)
+    ),
+    mainPanel(
+      tabsetPanel(
+        tabPanel("Pitches", br(), fluidRow(
+                 selectInput(inputId = "SideInput1", label = "Select Hitter Side", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$BatterSide)))),
+                 selectInput(inputId = "PitchInput1", label = "Select Pitch", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$TaggedPitchType))))),
+                 plotOutput('All_Pitches'), br(),
+                 dataTableOutput("Pitch_vs_Sides"), br(),
+                 dataTableOutput("Results_vs_Sides"), br()
+                 ),
+        tabPanel("Pitch Shapes", br(), fluidRow(
+          selectInput(inputId = "PitchInput12", label = "Select Pitch", 
+                      choices = sort(unique(Overall_Data_File$TaggedPitchType)))),
+          dataTableOutput('Shape_Table'), br(),
+        ),
+        tabPanel("Whiff/HH Plots", br(),
+                 selectInput(inputId = "SideInput22", label = "Select Hitter Side", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$BatterSide)))), br(),
+                 selectInput(inputId = "PitchInput22", label = "Select Pitch", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$TaggedPitchType)))),
+                 selectInput(inputId = "CountInput22", label = "Select Count", 
+                             choices = c(All = "All", "Ahead", "Behind", "Even", "Full")),
+                 plotOutput("WhiffPlot"), br(),
+                 dataTableOutput("Whiff_Metrics"), br(),
+                 plotOutput("HHPlot"), br(),
+                 dataTableOutput("HH_Metrics"), br()
+        ),
+        tabPanel("General Info", br(),
+                 selectInput(inputId = "SideInput2", label = "Select Hitter Side", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$BatterSide)))), br(),
+                dataTableOutput("GeneralTable")
+                ),
+        tabPanel("Pitch Plots", br(), plotOutput("pitch_movement_plot"),
+                 plotOutput("pitch_aa_plot"),
+                 plotOutput("pitch_release_plot")),
+        tabPanel("Results by Count", br(),
+                 dataTableOutput("Counts_Table")),
+        tabPanel("Grouped Counts", br(),
+                 selectInput(inputId = "CountInput", label = "Count", 
+                             choices = c(All = "All", "Ahead", "Even", "Behind", "Full")),
+                 selectInput(inputId = "SideInput4", label = "Batter Side", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$BatterSide)))),
+                 dataTableOutput("Count_Leverage_Table"), br(),
+                 dataTableOutput("Count_Results"), br(),
+                 selectInput(inputId = "PitchInput4", label = "Select Pitch", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$TaggedPitchType)))),
+                 plotOutput("Counts_Plot"), br(),
+                 plotOutput("WhiffPlot2"), br(),
+                 plotOutput("HHPlot2")),
+        tabPanel("Half Zone Plots", br(),fluidRow(
+          selectInput(inputId = "ZoneInput6", label = "Select Pitch Zone", 
+                      choices = c(All = "All", "Up", "Down", "1B Side", "3B Side"))),
+          selectInput(inputId = "PitchInput6", label = "Select Pitch", 
+                      choices = c(All = "All", sort(unique(Overall_Data_File$TaggedPitchType)))),
+          plotOutput("ZonePlot")),
+        tabPanel("Individual Pitcher Halves", br(),
+                 selectInput(inputId = "SideInput7", label = "Select Hitter Side", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$BatterSide)))),
+                 selectInput(inputId = "PitchInput7", label = "Select Pitch", 
+                             choices = c(All = "All", sort(unique(Overall_Data_File$TaggedPitchType)))),
+                 selectInput(inputId = "CountInput2", label = "Count", 
+                             choices = c(All = "All", "Ahead", "Even", "Behind", "Full")),
+                 dataTableOutput("Zones"))
+      )
+    )
+  )
+)
+}
+
+server <- function(input, output, session) {
+  
+  
+  # all pitch plot
+  output$All_Pitches <- renderPlot({
+    
+    if(input$YearInput != "All"){
+      
+    if(input$SideInput1 != "All"){
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1, DateYear == input$YearInput)
+      
+      })  
+      
+      if(input$PitchInput1 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1, TaggedPitchType == input$PitchInput1, DateYear == input$YearInput)
+        })  
+        
+        
+      }
+      else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1, DateYear == input$YearInput)
+        })
+        }
+    } else {
+      dataFilter <- reactive({
+        
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+        
+      })
+      
+      if(input$PitchInput1 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput1, DateYear == input$YearInput)
+        })  
+        
+        
+      } else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+        })}
+      
+    }
+    } else{
+      {
+        
+        if(input$SideInput1 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1)
+            
+          })  
+          
+          if(input$PitchInput1 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1, TaggedPitchType == input$PitchInput1)
+            })  
+            
+            
+          }
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1)
+            })
+          }
+        } else {
+          dataFilter <- reactive({
+            
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput)
+            
+          })
+          
+          if(input$PitchInput1 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput1)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput)
+            })}
+          
+        }
+      }
+    }
+  
+ 
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "All Pitches") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+    }, width = 400, height = 400)
+  
+  # Pitch quality data table
+  output$Pitch_vs_Sides <- renderDataTable({
+    
+    if(input$YearInput != "All"){
+      
+      if(input$SideInput1 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1, DateYear == input$YearInput)
+        })  
+      } else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+        })}
+    } else {
+      
+      if(input$SideInput1 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1)
+        })  
+      } else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput)
+        })}
+    }
+    
+  table_velo <- dataFilter() %>%
+    group_by('Pitch' = TaggedPitchType) %>%
+    summarize('Pitches' = n(),
+              'Velo' = round(mean(RelSpeed, na.rm = TRUE), 1), 
+              'SpinRate' = round(mean(SpinRate, na.rm = TRUE), 0),
+              'IVB' = round(mean(InducedVertBreak, na.rm = TRUE), 1),
+              'HB' = round(mean(HorzBreak, na.rm = TRUE), 1),
+              'Zone_Adj_VAA' = round(mean(VAA_Zone_Adj, na.rm = TRUE), 1),
+              'VRA' = round(mean(VertRelAngle, na.rm = TRUE), 1),
+              'RelHeight' = round(mean(RelHeight, na.rm = TRUE), 1),
+              'RelSide' = round(mean(RelSide, na.rm = TRUE), 1)) %>% 
+    mutate(Usage = Pitches / sum(Pitches),
+           Usage = scales::percent(Usage, accuracy = 0.1))  %>%
+    select(Pitch, Pitches, Usage, Velo, VRA, IVB, HB, Zone_Adj_VAA, RelHeight, RelSide)
+  
+  table_velo[is.na(table_velo)] = 0  
+  
+  tableFilter <- reactive({table_velo})
+  datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+})
+  
+  # Pitch Results table
+  output$Results_vs_Sides <- renderDataTable({
+    
+    if(input$YearInput != "All"){
+      
+      if(input$SideInput1 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1, DateYear == input$YearInput)
+        })  
+      } else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+        })}
+    } else {
+      
+      if(input$SideInput1 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput1)
+        })  
+      } else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput)
+        })}
+    }
+    
+    
+    table_results <- dataFilter() %>%
+      group_by('Pitch' = TaggedPitchType) %>%
+      summarize('Pitches' = n(),
+                PA = sum(PACheck, na.rm = TRUE), 
+                AB = sum(ABCheck, na.rm = TRUE), 
+                H = sum(HCheck, na.rm = TRUE), 
+                `1B` = sum(SingleCheck, na.rm = TRUE), 
+                `2B` = sum(DoubleCheck, na.rm = TRUE), 
+                `3B` = sum(TripleCheck, na.rm = TRUE), 
+                HR = sum(HRCheck, na.rm = TRUE), 
+                TB = (`1B`) + (`2B` * 2) + (`3B` * 3) + (HR * 4),
+                K = sum(StrikeoutCheck, na.rm = TRUE), 
+                BB = sum(WalkCheck, na.rm = TRUE), 
+                HBP = sum(HBPCheck, na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                `BIP%` = sum(BIPCheck, na.rm = TRUE)/sum(SwingCheck, na.rm = TRUE),
+                xwOBA = round(mean(xwOBAvalues[PACheck == TRUE], na.rm = TRUE), 3),
+                `CS%` = mean(CSCheck, na.rm = TRUE),
+                `Strike%` = mean(StrikeCheck, na.rm = TRUE), 
+                `StrikeProb%` = mean(called_strike_prob, na.rm = TRUE),
+                `FPS%` = mean(StrikeCheck[FPCheck == TRUE], na.rm = TRUE),
+                `Zone%` = mean(ZoneCheck, na.rm = TRUE), 
+                `Competitive%` = mean(CompetitiveCheck, na.rm = TRUE),
+                `Swing%` = mean(SwingCheck, na.rm = TRUE), 
+                `Chase%` = mean(SwingCheck[ZoneCheck == FALSE], na.rm = TRUE), 
+                `Z-Whiff%` = mean(WhiffCheck[ZoneCheck == TRUE & SwingCheck == TRUE]),
+                `Whiff%` = mean(WhiffCheck[SwingCheck == TRUE], na.rm = TRUE), 
+                `Z-Swing%` = mean(SwingCheck[ZoneCheck == TRUE], na.rm = TRUE),
+                `HH%` = mean(HardHitCheck[SwingCheck == TRUE], na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                xDamage = mean(av_xwOBAcon[BBECheck == TRUE],  na.rm = TRUE),
+                AvgEV = mean(ExitSpeed[BBECheck == TRUE], na.rm = TRUE), 
+                AVG = H / AB,
+                BABIP = (H-HR)/(AB-(HR+K)),
+                OBP = (H + BB + HBP) / PA,
+                SLG = TB / AB) %>% 
+      mutate(`Strike%` = scales::percent(`Strike%`, accuracy = 0.1),
+             `StrikeProb%` = scales::percent(`StrikeProb%`, accuracy = 0.1),
+             `FPS%` = scales::percent(`FPS%`, accuracy = 0.1),
+             `Zone%` = scales::percent(`Zone%`, accuracy = 0.1),
+             `Competitive%` = scales::percent(`Competitive%`, accuracy = 0.1),
+             `Chase%` = scales::percent(`Chase%`, accuracy = 0.1),
+             `CS%` = scales::percent(`CS%`, accuracy = 0.1),
+             `Whiff%` = scales::percent(`Whiff%`, accuracy = 0.1),
+             `Z-Whiff%` = scales::percent(`Z-Whiff%`, accuracy = 0.1),
+             `Z-Swing%` = scales::percent(`Z-Swing%`, accuracy = 0.1),
+             `Swing%` = scales::percent(`Swing%`, accuracy = 0.1),
+             `HH%` = scales::percent(`HH%`, accuracy = 0.1),
+             `BIP%` = scales::percent(`BIP%`, accuracy = 0.1),
+             xDamage = sprintf("%.3f", xDamage),
+             xwOBA = sprintf("%.3f", xwOBA),
+             AvgEV = sprintf("%.1f", AvgEV),
+             BABIP = sprintf("%.3f", BABIP),
+             AVG = sprintf("%.3f", AVG),
+             OBP = sprintf("%.3f", OBP),
+             SLG = sprintf("%.3f", SLG)) %>% 
+      select(Pitch, Pitches, `Zone%`,`Strike%`, `Swing%`, `Whiff%`, `CS%`, `Chase%`, `FPS%`, `Competitive%`,  `BIP%`,
+             `Z-Whiff%`, `Z-Swing%`, BBE, `HH%`, xDamage, AvgEV, AVG, BABIP, SLG, xwOBA)
+    
+    table_results[is.na(table_results)] <- "-"
+    
+    tableFilter <- reactive({table_results})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+  })
+  
+  # General AB Results table
+  output$GeneralTable <- renderDataTable({
+    
+    if(input$YearInput != "All"){
+      
+      if(input$SideInput2 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput2, DateYear == input$YearInput)
+        })  
+      } else {
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+        })}
+      
+    } else {
+      
+    if(input$SideInput2 != "All"){
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput2)
+      })  
+    } else {
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput)
+      })}
+    }
+    
+    general_table_results <- dataFilter() %>%
+      summarize('Pitches' = n(),
+                PA = sum(PACheck, na.rm = TRUE), 
+                AB = sum(ABCheck, na.rm = TRUE), 
+                H = sum(HCheck, na.rm = TRUE), 
+                `1B` = sum(SingleCheck, na.rm = TRUE), 
+                `2B` = sum(DoubleCheck, na.rm = TRUE), 
+                `3B` = sum(TripleCheck, na.rm = TRUE), 
+                HR = sum(HRCheck, na.rm = TRUE), 
+                TB = (`1B`) + (`2B` * 2) + (`3B` * 3) + (HR * 4),
+                SO = sum(StrikeoutCheck, na.rm = TRUE), 
+                BB = sum(WalkCheck, na.rm = TRUE), 
+                HBP = sum(HBPCheck, na.rm = TRUE),
+                K = sum(StrikeoutCheck, na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                IP = (sum(OutsOnPlay, na.rm = TRUE) + K)/3,
+                xwOBA = round(mean(xwOBAvalues[PACheck == TRUE], na.rm = TRUE), 3),
+                `Strike%` = mean(StrikeCheck, na.rm = TRUE), 
+                `StrikeProb%` = mean(called_strike_prob, na.rm = TRUE),
+                `FPS%` = mean(StrikeCheck[FPCheck == TRUE], na.rm = TRUE),
+                `Zone%` = mean(ZoneCheck, na.rm = TRUE), 
+                `Competitive%` = mean(CompetitiveCheck, na.rm = TRUE),
+                `K%` = sum(StrikeoutCheck, na.rm = TRUE)/PA,
+                `BB%` = (sum(WalkCheck, na.rm = TRUE) + sum(HBPCheck, na.rm = TRUE))/PA,
+                `K-BB%` = `K%` - `BB%`,
+                `Swing%` = mean(SwingCheck, na.rm = TRUE), 
+                `Chase%` = mean(SwingCheck[ZoneCheck == FALSE], na.rm = TRUE), 
+                `Z-Whiff%` = mean(WhiffCheck[ZoneCheck == TRUE & SwingCheck == TRUE]),
+                `Whiff%` = mean(WhiffCheck[SwingCheck == TRUE], na.rm = TRUE),
+                `BIP%` = mean(BIPCheck[SwingCheck = TRUE], na.rm = TRUE),
+                `Z-Swing%` = mean(SwingCheck[ZoneCheck == TRUE], na.rm = TRUE),
+                `O3P%` = sum(PACheck[PitchofPA < 4], na.rm = TRUE)/PA,
+                `3BallAB%` = sum(Ball3Check[PACheck = TRUE], na.rm = TRUE)/PA,
+                `3BallPitch%` = sum(Ball3Pitch, na.rm = TRUE)/Pitches,
+                `R2K%` = sum(R2KWin)/sum(R2KWin, R2KLoss),
+                `GB%` = sum(GBCheck, na.rm = TRUE)/BBE,
+                `FB%` = sum(FBCheck, na.rm = TRUE)/BBE,
+                `HH%` = sum(HardHitCheck, na.rm = TRUE)/BBE,
+                xDamage = mean(av_xwOBAcon[BBECheck == TRUE],  na.rm = TRUE),
+                AvgEV = mean(ExitSpeed[BBECheck == TRUE], na.rm = TRUE), 
+                AVG = H / AB,
+                OBP = (H + BB + HBP) / PA,
+                SLG = TB / AB,
+                BABIP = (H-HR)/(AB-(HR+K)),
+                FIP = (((13*HR)+(3*(BB+HBP))-(2*K))/(IP)) + 3.1) %>% 
+      mutate(`Strike%` = scales::percent(`Strike%`, accuracy = 0.1),
+             `StrikeProb%` = scales::percent(`StrikeProb%`, accuracy = 0.1),
+             `FPS%` = scales::percent(`FPS%`, accuracy = 0.1),
+             `Zone%` = scales::percent(`Zone%`, accuracy = 0.1),
+             `K%` = scales::percent(`K%`, accuracy = 0.1),
+             `BB%` = scales::percent(`BB%`, accuracy = 0.1),
+             `K-BB%` = scales::percent(`K-BB%`, accuracy = 0.1),
+             `O3P%` = scales::percent(`O3P%`, accuracy = 0.1),
+             `3BallAB%` = scales::percent(`3BallAB%`, accuracy = 0.1),
+             `3BallPitch%` = scales::percent(`3BallPitch%`, accuracy = 0.1),
+             `R2K%` = scales::percent(`R2K%`, accuracy = 0.1),
+             `GB%` = scales::percent(`GB%`, accuracy = 0.1),
+             `FB%` = scales::percent(`FB%`, accuracy = 0.1),
+             `HH%` = scales::percent(`HH%`, accuracy = 0.1),
+             `Competitive%` = scales::percent(`Competitive%`, accuracy = 0.1),
+             `Chase%` = scales::percent(`Chase%`, accuracy = 0.1),
+             `Whiff%` = scales::percent(`Whiff%`, accuracy = 0.1),
+             `BIP%` = scales::percent(`BIP%`, accuracy = 0.1),
+             `Z-Whiff%` = scales::percent(`Z-Whiff%`, accuracy = 0.1),
+             `Z-Swing%` = scales::percent(`Z-Swing%`, accuracy = 0.1),
+             `Swing%` = scales::percent(`Swing%`, accuracy = 0.1),
+             xDamage = sprintf("%.3f", xDamage),
+             xwOBA = sprintf("%.3f", xwOBA),
+             AvgEV = sprintf("%.1f", AvgEV),
+             AVG = sprintf("%.3f", AVG),
+             OBP = sprintf("%.3f", OBP),
+             SLG = sprintf("%.3f", SLG),
+             BABIP = sprintf("%.3f", BABIP),
+             IP = round(IP, digits = 2),
+             FIP = round(FIP, digits = 2)) %>% 
+      select(Pitches, PA, IP, `Zone%`,`Strike%`, `FPS%`, `K%`, `BB%`, `K-BB%`, `R2K%`, `O3P%`, `3BallAB%`, `3BallPitch%`, `Competitive%`, `Chase%`, `Whiff%`, 
+             `Z-Whiff%`, `Z-Swing%`, `Swing%`, `BIP%`, `GB%`, `FB%`, `HH%`, xDamage, AvgEV, AVG, SLG, xwOBA, BABIP, FIP)
+    
+    general_table_results[is.na(general_table_results)] <- "-"
+    
+    tableFilter <- reactive({general_table_results})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+    
+  })
+  
+  # movement plot
+  output$pitch_movement_plot <- renderPlot({
+    
+    if(input$YearInput != "All"){
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+      })
+      
+    } else {
+      
+    dataFilter <- reactive({
+      Overall_Data_File %>%
+        filter(Pitcher == input$PitcherInput)
+    })
+    }
+    
+    ggplot(data = dataFilter(), aes(x = HorzBreak, y = InducedVertBreak, color = TaggedPitchType)) + 
+      labs(x = "Horizontal Movement (HB)", y = "Vertical Movement (IVB)", color = "Pitch Type", title = "Pitch Movement") + 
+      xlim(-30, 30) + ylim(-30, 30) +
+      geom_segment(aes(x = 0, y = -25, xend = 0, yend = 25), size = 1, color = "grey55") + 
+      geom_segment(aes(x = -25, y = 0, xend = 25, yend = 0), size = 1, color = "grey55") +
+      geom_point(size = 3, na.rm = TRUE) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_text(size = 14))
+  }, width = 400, height = 400)
+  
+  # release plot
+  output$pitch_release_plot <- renderPlot({
+
+    if(input$YearInput != "All"){
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+      })
+      
+    } else {
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput)
+      })
+    }
+    
+    ggplot(data = dataFilter(), aes(x = RelSide, y = RelHeight, color = TaggedPitchType)) +
+      labs(x = "Horizontal Release Point", y = "Vertical Release Point", color = " ", title = "Release") + 
+      xlim(-4, 4) + ylim(2, 7) +
+      geom_segment(aes(x = 0, y = -25, xend = 0, yend = 25), size = 1, color = "grey55") + 
+      geom_segment(aes(x = -25, y = 0, xend = 25, yend = 0), size = 1, color = "grey55") +
+      geom_point(size = 3, na.rm = TRUE) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_text(size = 14))
+  }, width = 400, height = 400)
+  
+  # approach angle plot
+  output$pitch_aa_plot <- renderPlot({
+
+    if(input$YearInput != "All"){
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+      })
+      
+    } else {
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput)
+      })
+    }
+    
+    ggplot(data = dataFilter(), aes(x = HorzApprAngle, y = VertApprAngle, color = TaggedPitchType)) +
+      labs(x = "Horizontal Approach Angle", y = "Vertical Approach Angle", color = "Pitch Type", title = "Approach Angle") + 
+      xlim(-10, 10) + ylim(-15, 0) +
+      geom_point(size = 3, na.rm = TRUE) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_text(size = 14))
+  }, width = 400, height = 400)
+  
+  # Overall pitch table
+  output$VeloTable <- renderDataTable({
+ 
+    table_velo <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      table_velo <- table_velo %>% filter(Pitcher %in% input$PitcherInput, DateYear == input$YearInput)
+      
+    } else {
+      
+      table_velo <- table_velo %>% filter(Pitcher %in% input$PitcherInput)
+      
+    }
+ 
+    table_velo <- table_velo %>%
+      group_by('Pitch' = TaggedPitchType) %>%
+      summarize('Pitches' = n(),
+                'Velo' = round(mean(RelSpeed, na.rm = TRUE), 1), 
+                'SpinRate' = round(mean(SpinRate, na.rm = TRUE), 0),
+                'IVB' = round(mean(InducedVertBreak, na.rm = TRUE), 1),
+                'HB' = round(mean(HorzBreak, na.rm = TRUE), 1),
+                'RelHeight' = round(mean(RelHeight, na.rm = TRUE), 1),
+                'RelSide' = round(mean(RelSide, na.rm = TRUE), 1)) %>% 
+      mutate(Usage = Pitches / sum(Pitches),
+             Usage = scales::percent(Usage, accuracy = 0.1))  %>%
+      select(Pitch, Pitches, Usage, Velo, SpinRate, IVB, HB, RelHeight, RelSide)
+      
+      table_velo[is.na(table_velo)] = 0  
+      
+      tableFilter <- reactive({table_velo})
+      datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    })
+  
+  # Counts Table
+  output$Counts_Table <- renderDataTable({
+    
+    table_counts <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      table_counts <- table_counts %>% filter(Pitcher %in% input$PitcherInput, DateYear == input$YearInput)
+      
+    } else {
+    
+    table_counts <- table_counts %>% filter(Pitcher %in% input$PitcherInput)
+    
+    }
+    
+    table_counts <- table_counts %>%
+      group_by('Count' = Count) %>%
+      summarize('Pitches' = n(),
+                PA = sum(PACheck, na.rm = TRUE), 
+                AB = sum(ABCheck, na.rm = TRUE), 
+                H = sum(HCheck, na.rm = TRUE), 
+                `1B` = sum(SingleCheck, na.rm = TRUE), 
+                `2B` = sum(DoubleCheck, na.rm = TRUE), 
+                `3B` = sum(TripleCheck, na.rm = TRUE), 
+                HR = sum(HRCheck, na.rm = TRUE), 
+                TB = (`1B`) + (`2B` * 2) + (`3B` * 3) + (HR * 4),
+                SO = sum(StrikeoutCheck, na.rm = TRUE), 
+                BB = sum(WalkCheck, na.rm = TRUE), 
+                HBP = sum(HBPCheck, na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                xwOBA = round(mean(xwOBAvalues[PACheck == TRUE], na.rm = TRUE), 3),
+                `Strike%` = mean(StrikeCheck, na.rm = TRUE), 
+                `StrikeProb%` = mean(called_strike_prob, na.rm = TRUE),
+                `FPS%` = mean(StrikeCheck[FPCheck == TRUE], na.rm = TRUE),
+                `Zone%` = mean(ZoneCheck, na.rm = TRUE), 
+                `Competitive%` = mean(CompetitiveCheck, na.rm = TRUE),
+                `K%` = sum(StrikeoutCheck, na.rm = TRUE)/PA,
+                `BB%` = (sum(WalkCheck, na.rm = TRUE) + sum(HBPCheck, na.rm = TRUE))/PA,
+                `K-BB%` = `K%` - `BB%`,
+                `Swing%` = mean(SwingCheck, na.rm = TRUE), 
+                `Chase%` = mean(SwingCheck[ZoneCheck == FALSE], na.rm = TRUE), 
+                `Z-Whiff%` = mean(WhiffCheck[ZoneCheck == TRUE & SwingCheck == TRUE]),
+                `Whiff%` = mean(WhiffCheck[SwingCheck == TRUE], na.rm = TRUE),
+                `BIP%` = sum(BIPCheck, na.rm = TRUE)/sum(SwingCheck, na.rm = TRUE),
+                `Z-Swing%` = mean(SwingCheck[ZoneCheck == TRUE], na.rm = TRUE),
+                `O3P%` = sum(PACheck[PitchofPA < 4], na.rm = TRUE)/PA,
+                `3BallAB%` = sum(Ball3Check[PACheck = TRUE], na.rm = TRUE)/PA,
+                `3BallPitch%` = sum(Ball3Pitch, na.rm = TRUE)/Pitches,
+                `R2K%` = sum(R2KWin)/sum(R2KWin, R2KLoss),
+                `GB%` = sum(GBCheck, na.rm = TRUE)/BBE,
+                `FB%` = sum(FBCheck, na.rm = TRUE)/BBE,
+                `HH%` = sum(HardHitCheck, na.rm = TRUE)/BBE,
+                xDamage = mean(av_xwOBAcon[BBECheck == TRUE],  na.rm = TRUE),
+                AvgEV = mean(ExitSpeed[BBECheck == TRUE], na.rm = TRUE), 
+                AVG = H / AB,
+                OBP = (H + BB + HBP) / PA,
+                SLG = TB / AB) %>% 
+      mutate(`Strike%` = scales::percent(`Strike%`, accuracy = 0.1),
+             `StrikeProb%` = scales::percent(`StrikeProb%`, accuracy = 0.1),
+             `FPS%` = scales::percent(`FPS%`, accuracy = 0.1),
+             `Zone%` = scales::percent(`Zone%`, accuracy = 0.1),
+             `K%` = scales::percent(`K%`, accuracy = 0.1),
+             `BB%` = scales::percent(`BB%`, accuracy = 0.1),
+             `K-BB%` = scales::percent(`K-BB%`, accuracy = 0.1),
+             `O3P%` = scales::percent(`O3P%`, accuracy = 0.1),
+             `3BallAB%` = scales::percent(`3BallAB%`, accuracy = 0.1),
+             `3BallPitch%` = scales::percent(`3BallPitch%`, accuracy = 0.1),
+             `R2K%` = scales::percent(`R2K%`, accuracy = 0.1),
+             `GB%` = scales::percent(`GB%`, accuracy = 0.1),
+             `FB%` = scales::percent(`FB%`, accuracy = 0.1),
+             `HH%` = scales::percent(`HH%`, accuracy = 0.1),
+             `Competitive%` = scales::percent(`Competitive%`, accuracy = 0.1),
+             `Chase%` = scales::percent(`Chase%`, accuracy = 0.1),
+             `Whiff%` = scales::percent(`Whiff%`, accuracy = 0.1),
+             `BIP%` = scales::percent(`BIP%`, accuracy = 0.1),
+             `Z-Whiff%` = scales::percent(`Z-Whiff%`, accuracy = 0.1),
+             `Z-Swing%` = scales::percent(`Z-Swing%`, accuracy = 0.1),
+             `Swing%` = scales::percent(`Swing%`, accuracy = 0.1),
+             xDamage = sprintf("%.3f", xDamage),
+             xwOBA = sprintf("%.3f", xwOBA),
+             AvgEV = sprintf("%.1f", AvgEV),
+             AVG = sprintf("%.3f", AVG),
+             OBP = sprintf("%.3f", OBP),
+             SLG = sprintf("%.3f", SLG)) %>% 
+      select(Count, Pitches, PA, `Zone%`,`Strike%`,`Competitive%`, `Chase%`, `Whiff%`, 
+             `Z-Whiff%`, `Z-Swing%`, `Swing%`, `BIP%`, `GB%`, `FB%`, `HH%`, BBE, xDamage, AvgEV, AVG, SLG, xwOBA)
+    
+    tableFilter <- reactive({table_counts})
+    datatable(tableFilter(), options = list(dom = 't', pageLength = 12, columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+  })
+  
+  # Half zone table
+  output$Zones <- renderDataTable({
+    
+    zone_table <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      if(input$CountInput2 == "Ahead"){
+      
+      if(input$SideInput7 != "All"){
+        
+        dataFilter <- reactive({
+          zone_table %>%
+            filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+          
+        })  
+        
+        if(input$PitchInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+          })  
+          
+          
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+          })
+        }
+      } else {
+        dataFilter <- reactive({
+          zone_table %>%
+            filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, DateYear == input$YearInput)
+          
+        })
+        
+        if(input$PitchInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+          })  
+          
+          
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, DateYear == input$YearInput)
+          })}
+        
+      }
+        
+      }
+      
+      else if(input$CountInput2 == "Behind"){
+        
+        {
+          
+          if(input$SideInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+              
+            })  
+            
+            if(input$PitchInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+              })  
+              
+              
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+              })
+            }
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, DateYear == input$YearInput)
+              
+            })
+            
+            if(input$PitchInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+              })  
+              
+              
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, DateYear == input$YearInput)
+              })}
+            
+          }
+          
+        }
+        
+      }
+      
+      else if(input$CountInput2 == "Even") {
+        
+        {
+          
+          {
+            
+            if(input$SideInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+                
+              })  
+              
+              if(input$PitchInput7 != "All"){
+                
+                dataFilter <- reactive({
+                  zone_table %>%
+                    filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+                })  
+                
+                
+              } else {
+                dataFilter <- reactive({
+                  zone_table %>%
+                    filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+                })
+              }
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, DateYear == input$YearInput)
+                
+              })
+              
+              if(input$PitchInput7 != "All"){
+                
+                dataFilter <- reactive({
+                  zone_table %>%
+                    filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+                })  
+                
+                
+              } else {
+                dataFilter <- reactive({
+                  zone_table %>%
+                    filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, DateYear == input$YearInput)
+                })}
+              
+            }
+            
+          }
+          
+        }
+        
+      }
+      
+      else if(input$CountInput2 == "Full") {
+        
+        
+              if(input$SideInput7 != "All"){
+                
+                dataFilter <- reactive({
+                  zone_table %>%
+                    filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+                  
+                })  
+                
+                if(input$PitchInput7 != "All"){
+                  
+                  dataFilter <- reactive({
+                    zone_table %>%
+                      filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+                  })  
+                  
+                  
+                } else {
+                  dataFilter <- reactive({
+                    zone_table %>%
+                      filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, BatterSide == input$SideInput7, DateYear == input$YearInput)
+                  })
+                }
+              } else {
+                dataFilter <- reactive({
+                  zone_table %>%
+                    filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, DateYear == input$YearInput)
+                  
+                })
+                
+                if(input$PitchInput7 != "All"){
+                  
+                  dataFilter <- reactive({
+                    zone_table %>%
+                      filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+                  })  
+                  
+                  
+                } else {
+                  dataFilter <- reactive({
+                    zone_table %>%
+                      filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, DateYear == input$YearInput)
+                  })}
+                
+              }
+              
+      }
+      
+      else {
+          
+          if(input$SideInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput7, DateYear == input$YearInput)
+              
+            })  
+            
+            if(input$PitchInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+              })  
+              
+              
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput7, DateYear == input$YearInput)
+              })
+            }
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+              
+            })
+            
+            if(input$PitchInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput7, DateYear == input$YearInput)
+              })  
+              
+              
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+              })}
+            
+          }
+        
+      }
+      
+    } else { 
+      
+      if(input$CountInput2 == "Ahead") {
+          
+          if(input$SideInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, BatterSide == input$SideInput7)
+              
+            })  
+            
+            if(input$PitchInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7)
+              })  
+              
+              
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, BatterSide == input$SideInput7)
+              })
+            }
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE)
+              
+            })
+            
+            if(input$PitchInput7 != "All"){
+              
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, TaggedPitchType == input$PitchInput7)
+              })  
+              
+              
+            } else {
+              dataFilter <- reactive({
+                zone_table %>%
+                  filter(Pitcher == input$PitcherInput, PCountCheck == TRUE)
+              })}
+            
+          }
+        
+      }
+      
+      else if(input$CountInput2 == "Behind") {
+        
+        if(input$SideInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, BatterSide == input$SideInput7)
+            
+          })  
+          
+          if(input$PitchInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, BatterSide == input$SideInput7)
+            })
+          }
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE)
+            
+          })
+          
+          if(input$PitchInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, TaggedPitchType == input$PitchInput7)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE)
+            })}
+          
+        }
+        
+      }
+      
+      else if(input$CountInput2 == "Even") {
+        
+        if(input$SideInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, BatterSide == input$SideInput7)
+            
+          })  
+          
+          if(input$PitchInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, BatterSide == input$SideInput7)
+            })
+          }
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE)
+            
+          })
+          
+          if(input$PitchInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, TaggedPitchType == input$PitchInput7)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE)
+            })}
+          
+        }
+        
+      }
+      
+      else if(input$CountInput2 == "Full") {
+        
+        if(input$SideInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, BatterSide == input$SideInput7)
+            
+          })  
+          
+          if(input$PitchInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, BatterSide == input$SideInput7)
+            })
+          }
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE)
+            
+          })
+          
+          if(input$PitchInput7 != "All"){
+            
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, TaggedPitchType == input$PitchInput7)
+            })  
+            
+            
+          } else {
+            dataFilter <- reactive({
+              zone_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE)
+            })}
+          
+        }
+        
+      }
+      
+      else {
+      
+      if(input$SideInput7 != "All"){
+        
+        dataFilter <- reactive({
+          zone_table %>%
+            filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput7)
+          
+        })  
+        
+        if(input$PitchInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput7, TaggedPitchType == input$PitchInput7)
+          })  
+          
+          
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput7)
+          })
+        }
+      } else {
+        dataFilter <- reactive({
+          zone_table %>%
+            filter(Pitcher == input$PitcherInput)
+          
+        })
+        
+        if(input$PitchInput7 != "All"){
+          
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput7)
+          })  
+          
+          
+        } else {
+          dataFilter <- reactive({
+            zone_table %>%
+              filter(Pitcher == input$PitcherInput)
+          })}
+        
+      }
+      
+    }
+    
+    }
+    
+    zone_table <- dataFilter() %>%
+      group_by(PitchQuadCheck) %>%
+      summarize('Pitches' = n(),
+                PA = sum(PACheck, na.rm = TRUE), 
+                AB = sum(ABCheck, na.rm = TRUE), 
+                H = sum(HCheck, na.rm = TRUE), 
+                `1B` = sum(SingleCheck, na.rm = TRUE), 
+                `2B` = sum(DoubleCheck, na.rm = TRUE), 
+                `3B` = sum(TripleCheck, na.rm = TRUE), 
+                HR = sum(HRCheck, na.rm = TRUE), 
+                TB = (`1B`) + (`2B` * 2) + (`3B` * 3) + (HR * 4),
+                SO = sum(StrikeoutCheck, na.rm = TRUE), 
+                BB = sum(WalkCheck, na.rm = TRUE), 
+                HBP = sum(HBPCheck, na.rm = TRUE),
+                K = sum(StrikeoutCheck, na.rm = TRUE),
+                xwOBA = round(mean(xwOBAvalues[PACheck == TRUE], na.rm = TRUE), 3),
+                `CS%` = mean(CSCheck, na.rm = TRUE), 
+                `Strike%` = mean(StrikeCheck, na.rm = TRUE), 
+                `StrikeProb%` = mean(called_strike_prob, na.rm = TRUE),
+                `Zone%` = mean(ZoneCheck, na.rm = TRUE), 
+                `Swing%` = mean(SwingCheck, na.rm = TRUE), 
+                Swings = sum(SwingCheck, na.rm = TRUE),
+                Whiffs = sum(WhiffCheck, na.rm = TRUE),
+                `BIP%` = sum(BIPCheck, na.rm = TRUE)/sum(SwingCheck, na.rm = TRUE),
+                `Chase%` = mean(SwingCheck[ZoneCheck == FALSE], na.rm = TRUE), 
+                `Z-Whiff%` = mean(WhiffCheck[ZoneCheck == TRUE & SwingCheck == TRUE]),
+                `Whiff%` = mean(WhiffCheck[SwingCheck == TRUE], na.rm = TRUE), 
+                `Z-Swing%` = mean(SwingCheck[ZoneCheck == TRUE], na.rm = TRUE),
+                `Foul%` = mean(FoulCheck[SwingCheck = TRUE], na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                xDamage = mean(av_xwOBAcon[BBECheck == TRUE],  na.rm = TRUE),
+                AvgEV = mean(ExitSpeed[BBECheck == TRUE], na.rm = TRUE), 
+                AVG = H / AB,
+                OBP = (H + BB + HBP) / PA,
+                SLG = TB / AB,
+                BABIP = (H-HR)/(AB-(HR+K)),
+                Score = 100*{(`BIP%`*xDamage) + (2*`Whiff%`) + (1.5*`CS%`) + `Foul%` - (1-`Strike%`)}) %>% 
+      mutate(`CS%` = scales::percent(`CS%`, accuracy = 0.1),
+             `Strike%` = scales::percent(`Strike%`, accuracy = 0.1),
+             `StrikeProb%` = scales::percent(`StrikeProb%`, accuracy = 0.1),
+             `Zone%` = scales::percent(`Zone%`, accuracy = 0.1),
+             `BIP%` = scales::percent(`BIP%`, accuracy = 0.1),
+             `Chase%` = scales::percent(`Chase%`, accuracy = 0.1),
+             `Whiff%` = scales::percent(`Whiff%`, accuracy = 0.1),
+             `Z-Whiff%` = scales::percent(`Z-Whiff%`, accuracy = 0.1),
+             `Z-Swing%` = scales::percent(`Z-Swing%`, accuracy = 0.1),
+             `Swing%` = scales::percent(`Swing%`, accuracy = 0.1),
+             `Foul%` = scales::percent(`Foul%`, accuracy = 0.1),
+             xDamage = sprintf("%.3f", xDamage),
+             xwOBA = sprintf("%.3f", xwOBA),
+             AvgEV = sprintf("%.1f", AvgEV),
+             AVG = sprintf("%.3f", AVG),
+             OBP = sprintf("%.3f", OBP),
+             SLG = sprintf("%.3f", SLG),
+             BABIP = sprintf("%.3f", BABIP),
+             Score = sprintf("%.1f", Score)) %>% 
+      select(PitchQuadCheck, Pitches, `CS%`, `Strike%`, `Zone%`, `BIP%`, `Chase%`, Swings, `Swing%`, Whiffs, `Whiff%`, 
+             `Z-Whiff%`, `Z-Swing%`, `Foul%`, BBE, xDamage, xwOBA, AvgEV, AVG, SLG, BABIP)
+    
+    zone_table[is.na(zone_table)] <- "-"
+    
+    tableFilter <- reactive({zone_table})
+    datatable(tableFilter(), options = list(dom = 't', pageLength = nrow(tableFilter()), columnDefs = list(list(targets = 0, visible = FALSE))), width = "300px")
+    
+  })
+  
+  # Half zone plot
+  output$ZonePlot <- renderPlot({
+    
+    if(input$YearInput != "All") {
+      
+      if(input$ZoneInput6 != "All"){
+        
+        if(input$ZoneInput6 == "Up"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, UpperHalfCheck == TRUE, DateYear == input$YearInput)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, UpperHalfCheck == TRUE, TaggedPitchType == input$PitchInput6, DateYear == input$YearInput)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, UpperHalfCheck == TRUE, DateYear == input$YearInput)
+            })
+          }
+          
+        }
+        
+        else if(input$ZoneInput6 == "Down"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, LowerHalfCheck == TRUE, DateYear == input$YearInput)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LowerHalfCheck == TRUE, TaggedPitchType == input$PitchInput6, DateYear == input$YearInput)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LowerHalfCheck == TRUE, DateYear == input$YearInput)
+            })
+          }
+          
+        }
+        
+        else if(input$ZoneInput6 == "3B Side"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, RightHalfCheck == TRUE, DateYear == input$YearInput)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, RightHalfCheck == TRUE, TaggedPitchType == input$PitchInput6, DateYear == input$YearInput)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, RightHalfCheck == TRUE, DateYear == input$YearInput)
+            })
+          }
+          
+        }
+        
+        else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, LeftHalfCheck == TRUE, DateYear == input$YearInput)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LeftHalfCheck == TRUE, TaggedPitchType == input$PitchInput6, DateYear == input$YearInput)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LeftHalfCheck == TRUE, DateYear == input$YearInput)
+            })
+          }
+          
+        }
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+          
+        })
+        
+        if(input$PitchInput6 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput6, DateYear == input$YearInput)
+          })  
+          
+          
+        } else {
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+          })}
+        
+      }
+      
+    } else {
+      
+      if(input$ZoneInput6 != "All"){
+        
+        if(input$ZoneInput6 == "Up"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, UpperHalfCheck == TRUE)
+          
+        })  
+        
+        if(input$PitchInput6 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, UpperHalfCheck == TRUE, TaggedPitchType == input$PitchInput6)
+          })  
+        }
+          
+         else {
+          dataFilter <- reactive({
+            
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, UpperHalfCheck == TRUE)
+          })
+         }
+        
+        }
+        
+        else if(input$ZoneInput6 == "Down"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, LowerHalfCheck == TRUE)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LowerHalfCheck == TRUE, TaggedPitchType == input$PitchInput6)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LowerHalfCheck == TRUE)
+            })
+          }
+          
+        }
+        
+        else if(input$ZoneInput6 == "3B Side"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, RightHalfCheck == TRUE)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, RightHalfCheck == TRUE, TaggedPitchType == input$PitchInput6)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, RightHalfCheck == TRUE)
+            })
+          }
+          
+        }
+        
+        else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, LeftHalfCheck == TRUE)
+            
+          })  
+          
+          if(input$PitchInput6 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LeftHalfCheck == TRUE, TaggedPitchType == input$PitchInput6)
+            })  
+          }
+          
+          else {
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, LeftHalfCheck == TRUE)
+            })
+          }
+          
+        }
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput)
+          
+        })
+        
+        if(input$PitchInput6 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput6)
+          })  
+          
+          
+        } else {
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput)
+          })}
+        
+      }
+      
+    }
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "All Pitches") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # Count Leverage
+  output$Count_Leverage_Table <- renderDataTable({
+    
+    count_table <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      if(input$CountInput != "All"){
+        
+        if(input$CountInput == "Ahead"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+            } else {
+        
+        dataFilter <- reactive({
+          count_table %>%
+            filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE)
+        })  
+            }
+        }
+        
+        else if(input$CountInput == "Behind"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Even") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Full") {
+         
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE)
+            })  
+          }
+           
+        }
+        
+      } else {
+          
+        if(input$SideInput4 != "All"){
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, DateYear == input$YearInput)
+          }) 
+          
+        } else {
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+          })  
+        }
+        
+        }
+        
+    } else {
+          
+      if(input$CountInput != "All"){
+        
+        if(input$CountInput == "Ahead"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, PCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE)
+            })  
+          }
+        }
+        
+        else if(input$CountInput == "Behind"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, HCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Even") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Full") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      } else {
+        
+        if(input$SideInput4 != "All"){
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4)
+          }) 
+          
+        } else {
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput)
+          })  
+        }
+        
+      }
+      
+    }
+    
+    count_table <- dataFilter() %>%
+      group_by('Pitch' = TaggedPitchType) %>%
+      summarize('Pitches' = n(),
+                PA = sum(PACheck, na.rm = TRUE), 
+                AB = sum(ABCheck, na.rm = TRUE), 
+                H = sum(HCheck, na.rm = TRUE), 
+                `1B` = sum(SingleCheck, na.rm = TRUE), 
+                `2B` = sum(DoubleCheck, na.rm = TRUE), 
+                `3B` = sum(TripleCheck, na.rm = TRUE), 
+                HR = sum(HRCheck, na.rm = TRUE), 
+                TB = (`1B`) + (`2B` * 2) + (`3B` * 3) + (HR * 4),
+                SO = sum(StrikeoutCheck, na.rm = TRUE), 
+                BB = sum(WalkCheck, na.rm = TRUE), 
+                HBP = sum(HBPCheck, na.rm = TRUE),
+                `BIP%` = sum(BIPCheck, na.rm = TRUE)/sum(SwingCheck, na.rm = TRUE),
+                xwOBA = round(mean(xwOBAvalues[PACheck == TRUE], na.rm = TRUE), 3),
+                `CS%` = mean(CSCheck, na.rm = TRUE),
+                `Strike%` = mean(StrikeCheck, na.rm = TRUE), 
+                `StrikeProb%` = mean(called_strike_prob, na.rm = TRUE),
+                `FPS%` = mean(StrikeCheck[FPCheck == TRUE], na.rm = TRUE),
+                `Zone%` = mean(ZoneCheck, na.rm = TRUE), 
+                `Competitive%` = mean(CompetitiveCheck, na.rm = TRUE),
+                `Swing%` = mean(SwingCheck, na.rm = TRUE), 
+                `Chase%` = mean(SwingCheck[ZoneCheck == FALSE], na.rm = TRUE), 
+                `Z-Whiff%` = mean(WhiffCheck[ZoneCheck == TRUE & SwingCheck == TRUE]),
+                `Whiff%` = mean(WhiffCheck[SwingCheck == TRUE], na.rm = TRUE), 
+                `Z-Swing%` = mean(SwingCheck[ZoneCheck == TRUE], na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                xDamage = mean(av_xwOBAcon[BBECheck == TRUE],  na.rm = TRUE),
+                AvgEV = mean(ExitSpeed[BBECheck == TRUE], na.rm = TRUE), 
+                AVG = H / AB,
+                OBP = (H + BB + HBP) / PA,
+                SLG = TB / AB) %>% 
+      mutate(`Strike%` = scales::percent(`Strike%`, accuracy = 0.1),
+             `StrikeProb%` = scales::percent(`StrikeProb%`, accuracy = 0.1),
+             `FPS%` = scales::percent(`FPS%`, accuracy = 0.1),
+             `Zone%` = scales::percent(`Zone%`, accuracy = 0.1),
+             `Competitive%` = scales::percent(`Competitive%`, accuracy = 0.1),
+             `Chase%` = scales::percent(`Chase%`, accuracy = 0.1),
+             `CS%` = scales::percent(`CS%`, accuracy = 0.1),
+             `Whiff%` = scales::percent(`Whiff%`, accuracy = 0.1),
+             `Z-Whiff%` = scales::percent(`Z-Whiff%`, accuracy = 0.1),
+             `Z-Swing%` = scales::percent(`Z-Swing%`, accuracy = 0.1),
+             `Swing%` = scales::percent(`Swing%`, accuracy = 0.1),
+             `BIP%` = scales::percent(`BIP%`, accuracy = 0.1),
+             xDamage = sprintf("%.3f", xDamage),
+             xwOBA = sprintf("%.3f", xwOBA),
+             AvgEV = sprintf("%.1f", AvgEV),
+             AVG = sprintf("%.3f", AVG),
+             OBP = sprintf("%.3f", OBP),
+             SLG = sprintf("%.3f", SLG),
+             Usage = Pitches/sum(Pitches),
+             Usage = scales::percent(Usage, accuracy = 0.1)) %>% 
+      select(Pitch, Pitches, Usage, `Zone%`,`Strike%`, `Competitive%`, `CS%`, `Chase%`, `Whiff%`, `BIP%`,
+             `Z-Whiff%`, `Z-Swing%`, `Swing%`, BBE, xDamage, AvgEV, AVG, SLG, xwOBA)
+    
+    count_table[is.na(count_table)] <- "-"
+    
+    tableFilter <- reactive({count_table})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+    
+  })
+  
+  # Count Results Table
+  output$Count_Results <- renderDataTable({
+    
+    count_table <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      if(input$CountInput != "All"){
+        
+        if(input$CountInput == "Ahead"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE)
+            })  
+          }
+        }
+        
+        else if(input$CountInput == "Behind"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Even") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Full") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      } else {
+        
+        if(input$SideInput4 != "All"){
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, DateYear == input$YearInput)
+          }) 
+          
+        } else {
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+          })  
+        }
+        
+      }
+      
+    } else {
+      
+      if(input$CountInput != "All"){
+        
+        if(input$CountInput == "Ahead"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, PCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE)
+            })  
+          }
+        }
+        
+        else if(input$CountInput == "Behind"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, HCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Even") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Full") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      } else {
+        
+        if(input$SideInput4 != "All"){
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4)
+          }) 
+          
+        } else {
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput)
+          })  
+        }
+        
+      }
+      
+    }
+    
+    count_table <- dataFilter() %>%
+      group_by('Count' = CountLeverage) %>%
+      summarize('Pitches' = n(),
+                PA = sum(PACheck, na.rm = TRUE), 
+                AB = sum(ABCheck, na.rm = TRUE), 
+                H = sum(HCheck, na.rm = TRUE), 
+                `1B` = sum(SingleCheck, na.rm = TRUE), 
+                `2B` = sum(DoubleCheck, na.rm = TRUE), 
+                `3B` = sum(TripleCheck, na.rm = TRUE), 
+                HR = sum(HRCheck, na.rm = TRUE), 
+                TB = (`1B`) + (`2B` * 2) + (`3B` * 3) + (HR * 4),
+                SO = sum(StrikeoutCheck, na.rm = TRUE), 
+                BB = sum(WalkCheck, na.rm = TRUE), 
+                HBP = sum(HBPCheck, na.rm = TRUE),
+                `BIP%` = sum(BIPCheck, na.rm = TRUE)/sum(SwingCheck, na.rm = TRUE),
+                xwOBA = round(mean(xwOBAvalues[PACheck == TRUE], na.rm = TRUE), 3),
+                `CS%` = mean(CSCheck, na.rm = TRUE),
+                `Strike%` = mean(StrikeCheck, na.rm = TRUE), 
+                `StrikeProb%` = mean(called_strike_prob, na.rm = TRUE),
+                `FPS%` = mean(StrikeCheck[FPCheck == TRUE], na.rm = TRUE),
+                `Zone%` = mean(ZoneCheck, na.rm = TRUE), 
+                `Competitive%` = mean(CompetitiveCheck, na.rm = TRUE),
+                `Swing%` = mean(SwingCheck, na.rm = TRUE), 
+                `Chase%` = mean(SwingCheck[ZoneCheck == FALSE], na.rm = TRUE), 
+                `Z-Whiff%` = mean(WhiffCheck[ZoneCheck == TRUE & SwingCheck == TRUE]),
+                `Whiff%` = mean(WhiffCheck[SwingCheck == TRUE], na.rm = TRUE), 
+                `Z-Swing%` = mean(SwingCheck[ZoneCheck == TRUE], na.rm = TRUE),
+                BBE = sum(BBECheck, na.rm = TRUE),
+                xDamage = mean(av_xwOBAcon[BBECheck == TRUE],  na.rm = TRUE),
+                AvgEV = mean(ExitSpeed[BBECheck == TRUE], na.rm = TRUE), 
+                AVG = H / AB,
+                OBP = (H + BB + HBP) / PA,
+                SLG = TB / AB) %>% 
+      mutate(`Strike%` = scales::percent(`Strike%`, accuracy = 0.1),
+             `StrikeProb%` = scales::percent(`StrikeProb%`, accuracy = 0.1),
+             `FPS%` = scales::percent(`FPS%`, accuracy = 0.1),
+             `Zone%` = scales::percent(`Zone%`, accuracy = 0.1),
+             `Competitive%` = scales::percent(`Competitive%`, accuracy = 0.1),
+             `Chase%` = scales::percent(`Chase%`, accuracy = 0.1),
+             `CS%` = scales::percent(`CS%`, accuracy = 0.1),
+             `Whiff%` = scales::percent(`Whiff%`, accuracy = 0.1),
+             `Z-Whiff%` = scales::percent(`Z-Whiff%`, accuracy = 0.1),
+             `Z-Swing%` = scales::percent(`Z-Swing%`, accuracy = 0.1),
+             `Swing%` = scales::percent(`Swing%`, accuracy = 0.1),
+             `BIP%` = scales::percent(`BIP%`, accuracy = 0.1),
+             xDamage = sprintf("%.3f", xDamage),
+             xwOBA = sprintf("%.3f", xwOBA),
+             AvgEV = sprintf("%.1f", AvgEV),
+             AVG = sprintf("%.3f", AVG),
+             OBP = sprintf("%.3f", OBP),
+             SLG = sprintf("%.3f", SLG),
+             Usage = Pitches/sum(Pitches),
+             Usage = scales::percent(Usage, accuracy = 0.1)) %>% 
+      select(Count, Pitches, `Zone%`,`Strike%`, `Competitive%`, `CS%`, `Chase%`, `Whiff%`, `BIP%`,
+             `Z-Whiff%`, `Z-Swing%`, `Swing%`, BBE, xDamage, AvgEV, AVG, SLG, xwOBA)
+    
+    count_table[is.na(count_table)] <- "-"
+    
+    tableFilter <- reactive({count_table})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+    
+  })
+  
+  # Counts Plot
+  output$Counts_Plot <- renderPlot({
+    
+    count_table <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      if(input$PitchInput4 != "All") {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, DateYear == input$YearInput)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput)
+            })  
+          }
+          
+        }
+        
+      }
+      
+      else {
+      
+      if(input$CountInput != "All"){
+        
+        if(input$CountInput == "Ahead"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE)
+            })  
+          }
+        }
+        
+        else if(input$CountInput == "Behind"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Even") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Full") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      } else {
+        
+        if(input$SideInput4 != "All"){
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, DateYear == input$YearInput)
+          }) 
+          
+        } else {
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput)
+          })  
+        }
+        
+      }
+      
+      }
+      
+    } else {
+      
+      if(input$PitchInput4 != "All") {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, PCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, HCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4)
+            })  
+          }
+          
+        }
+        
+      }
+      
+      else{
+      
+      if(input$CountInput != "All"){
+        
+        if(input$CountInput == "Ahead"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, PCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE)
+            })  
+          }
+        }
+        
+        else if(input$CountInput == "Behind"){
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, HCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Even") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE)
+            })  
+          }
+          
+        } 
+        
+        else if(input$CountInput == "Full") {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+            })  
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      } else {
+        
+        if(input$SideInput4 != "All"){
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput, BatterSide == input$SideInput4)
+          }) 
+          
+        } else {
+          
+          dataFilter <- reactive({
+            count_table %>%
+              filter(Pitcher == input$PitcherInput)
+          })  
+        }
+        
+      }
+      
+      }
+    }
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "All Pitches") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+    
+    
+  }, width = 400, height = 400)
+  
+  # Whiff Plot
+  output$WhiffPlot <- renderPlot({
+    
+    if(input$YearInput != "All") {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    else {
+    
+    if(input$CountInput22 == "Ahead"){
+      
+      if(input$SideInput22 != "All"){
+        
+        if(input$PitchInput22 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+          })
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+          })
+          
+        }
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, WhiffCheck == TRUE)
+        })
+        
+        
+      }
+      
+    } 
+    
+    else if(input$CountInput22 == "Behind") {
+      
+      if(input$SideInput22 != "All"){
+        
+        if(input$PitchInput22 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+          })
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+          })
+          
+        }
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, WhiffCheck == TRUE)
+        })
+        
+        
+      }
+      
+    }
+    
+    else if(input$CountInput22 == "Even") {
+      
+      if(input$SideInput22 != "All"){
+        
+        if(input$PitchInput22 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+          })
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+          })
+          
+        }
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, WhiffCheck == TRUE)
+        })
+        
+        
+      }
+      
+    }
+    
+    else if(input$CountInput22 == "Full") {
+      
+      if(input$SideInput22 != "All"){
+        
+        if(input$PitchInput22 != "All"){
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+          })
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+          })
+          
+        }
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, WhiffCheck == TRUE)
+        })
+        
+        
+      }
+      
+    }
+    
+    else{
+    
+    if(input$SideInput22 != "All"){
+      
+      if(input$PitchInput22 != "All"){
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+          })
+        
+      } else {
+        
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+        })
+        
+      }
+      
+    } else {
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE)
+      })
+      
+      
+    }
+    
+    }
+    
+    }
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "Swing and Miss") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # Whiff Metrics
+  output$Whiff_Metrics <- renderDataTable({
+    
+    if(input$YearInput != "All") {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    else {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    table_velo <- dataFilter() %>%
+      group_by('Pitch' = TaggedPitchType) %>%
+      summarize('Pitches' = n(),
+                'Velo' = round(mean(RelSpeed, na.rm = TRUE), 1), 
+                'SpinRate' = round(mean(SpinRate, na.rm = TRUE), 0),
+                'IVB' = round(mean(InducedVertBreak, na.rm = TRUE), 1),
+                'HB' = round(mean(HorzBreak, na.rm = TRUE), 1),
+                'Zone_Adj_VAA' = round(mean(VAA_Zone_Adj, na.rm = TRUE), 1),
+                'VRA' = round(mean(VertRelAngle, na.rm = TRUE), 1),
+                'RelHeight' = round(mean(RelHeight, na.rm = TRUE), 1),
+                'RelSide' = round(mean(RelSide, na.rm = TRUE), 1)) %>% 
+      mutate(Usage = Pitches / sum(Pitches),
+             Usage = scales::percent(Usage, accuracy = 0.1))  %>%
+      select(Pitch, Pitches, Usage, Velo, VRA, IVB, HB, Zone_Adj_VAA, RelHeight, RelSide)
+    
+    table_velo[is.na(table_velo)] = 0  
+    
+    tableFilter <- reactive({table_velo})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+  })
+  
+  # HH Plot
+  output$HHPlot <- renderPlot({
+    
+    if(input$YearInput != "All") {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    else {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "Hard Hit") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # HH Metrics
+  output$HH_Metrics <- renderDataTable({
+    
+    if(input$YearInput != "All") {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, PCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, EvenCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, FullCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, DateYear == input$YearInput, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    else {
+      
+      if(input$CountInput22 == "Ahead"){
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, PCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      } 
+      
+      else if(input$CountInput22 == "Behind") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Even") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, EvenCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else if(input$CountInput22 == "Full") {
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, FullCountCheck == TRUE, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$SideInput22 != "All"){
+          
+          if(input$PitchInput22 != "All"){
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput22, TaggedPitchType == input$PitchInput22)
+            })
+            
+          } else {
+            
+            dataFilter <- reactive({
+              Overall_Data_File %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput22)
+            })
+            
+          }
+          
+        } else {
+          
+          dataFilter <- reactive({
+            Overall_Data_File %>%
+              filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE)
+          })
+          
+          
+        }
+        
+      }
+      
+    }
+    
+    table_velo <- dataFilter() %>%
+      group_by('Pitch' = TaggedPitchType) %>%
+      summarize('Pitches' = n(),
+                'Velo' = round(mean(RelSpeed, na.rm = TRUE), 1), 
+                'SpinRate' = round(mean(SpinRate, na.rm = TRUE), 0),
+                'IVB' = round(mean(InducedVertBreak, na.rm = TRUE), 1),
+                'HB' = round(mean(HorzBreak, na.rm = TRUE), 1),
+                'Zone_Adj_VAA' = round(mean(VAA_Zone_Adj, na.rm = TRUE), 1),
+                'VRA' = round(mean(VertRelAngle, na.rm = TRUE), 1),
+                'RelHeight' = round(mean(RelHeight, na.rm = TRUE), 1),
+                'RelSide' = round(mean(RelSide, na.rm = TRUE), 1)) %>% 
+      mutate(Usage = Pitches / sum(Pitches),
+             Usage = scales::percent(Usage, accuracy = 0.1))  %>%
+      select(Pitch, Pitches, Usage, Velo, VRA, IVB, HB, Zone_Adj_VAA, RelHeight, RelSide)
+    
+    table_velo[is.na(table_velo)] = 0  
+    
+    tableFilter <- reactive({table_velo})
+    datatable(tableFilter(), options = list(dom = 't', columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+  })
+  
+  # Whiff Plot pt 2
+  output$WhiffPlot2 <- renderPlot({
+    
+    count_table <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      if(input$PitchInput4 != "All") {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, WhiffCheck == TRUE, PCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput4, WhiffCheck == TRUE, DateYear == input$YearInput, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, DateYear == input$YearInput)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput)
+            })  
+          }
+          
+        }
+        
+      }
+      
+      else {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, DateYear == input$YearInput, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, DateYear == input$YearInput, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, DateYear == input$YearInput, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, DateYear == input$YearInput, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, DateYear == input$YearInput)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, DateYear == input$YearInput)
+            })  
+          }
+          
+        }
+        
+      }
+      
+    } else {
+      
+      if(input$PitchInput4 != "All") {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, PCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, HCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, TaggedPitchType == input$PitchInput4)
+            })  
+          }
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, PCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, HCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE, BatterSide == input$SideInput4)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, WhiffCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      }
+    }
+    
+    
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "Swing and Miss") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # HH Plot pt 2
+  output$HHPlot2 <- renderPlot({
+    
+    count_table <- Overall_Data_File
+    
+    if(input$YearInput != "All"){
+      
+      if(input$PitchInput4 != "All") {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, DateYear == input$YearInput)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, DateYear == input$YearInput)
+            })  
+          }
+          
+        }
+        
+      }
+      
+      else {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, PCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, DateYear == input$YearInput, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, HCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, DateYear == input$YearInput, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, EvenCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, DateYear == input$YearInput, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, FullCountCheck == TRUE, DateYear == input$YearInput)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, DateYear == input$YearInput, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, DateYear == input$YearInput)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, DateYear == input$YearInput)
+            })  
+          }
+          
+        }
+        
+      }
+      
+    } else {
+      
+      if(input$PitchInput4 != "All") {
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, PCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, HCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4, BatterSide == input$SideInput4)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, TaggedPitchType == input$PitchInput4)
+            })  
+          }
+          
+        }
+        
+      }
+      
+      else{
+        
+        if(input$CountInput != "All"){
+          
+          if(input$CountInput == "Ahead"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, PCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, PCountCheck == TRUE)
+              })  
+            }
+          }
+          
+          else if(input$CountInput == "Behind"){
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, HCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, HCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Even") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, EvenCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, EvenCountCheck == TRUE)
+              })  
+            }
+            
+          } 
+          
+          else if(input$CountInput == "Full") {
+            
+            if(input$SideInput4 != "All"){
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4, FullCountCheck == TRUE)
+              })  
+            } else {
+              
+              dataFilter <- reactive({
+                count_table %>%
+                  filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, FullCountCheck == TRUE)
+              })  
+            }
+            
+          }
+          
+        } else {
+          
+          if(input$SideInput4 != "All"){
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE, BatterSide == input$SideInput4)
+            }) 
+            
+          } else {
+            
+            dataFilter <- reactive({
+              count_table %>%
+                filter(Pitcher == input$PitcherInput, HardHitCheck == TRUE)
+            })  
+          }
+          
+        }
+        
+      }
+    }
+
+    ggplot(data = dataFilter(), aes(x = PlateLocSide, y = PlateLocHeight,color = TaggedPitchType)) +
+      xlim(-3,3) + ylim(0,5) + labs(color = "", title = "Hard Hit") +
+      geom_rect(aes(xmin = -0.83, xmax = 0.83, ymin = 1.5, ymax = 3.5), alpha = 0, size = 1, color = "black") +
+      geom_segment(aes(x = -0.708, y = 0.15, xend = 0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = -0.708, yend = 0.15), size = 1, color = "black") + 
+      geom_segment(aes(x = -0.708, y = 0.3, xend = 0, yend = 0.5), size = 1, color = "black") + 
+      geom_segment(aes(x = 0, y = 0.5, xend = 0.708, yend = 0.3), size = 1, color = "black") + 
+      geom_segment(aes(x = 0.708, y = 0.3, xend = 0.708, yend = 0.15), size = 1, color = "black") +
+      geom_point(size = 3, na.rm = TRUE) +
+      scale_color_manual(values = c('Fastball' = 'red', 'Curveball' = 'darkgreen', 'Sinker' = '#f47b20',  'Slider'='cornflowerblue',
+                                    'Cutter' = 'gold',  'ChangeUp'='violet', 'OT' = 'black')) +
+      theme_bw() + theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      theme(legend.position = "bottom", legend.text = element_text(size = 12), axis.title = element_blank())
+  }, width = 400, height = 400)
+  
+  # Shape Table
+  output$Shape_Table <- renderDataTable({
+    
+    if(input$YearInput != "All"){
+      
+        dataFilter <- reactive({
+          Overall_Data_File %>%
+            filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput12, DateYear == input$YearInput)
+        })
+      
+    } else {
+      
+      dataFilter <- reactive({
+        Overall_Data_File %>%
+          filter(Pitcher == input$PitcherInput, TaggedPitchType == input$PitchInput12)
+      })
+
+    }
+    
+    shape_table <- dataFilter() %>% 
+      group_by(Tilt) %>% 
+      summarize('Count' = n(),
+                'Velo' = round(mean(RelSpeed), 1),
+                'Vert' = round(mean(InducedVertBreak), 1),
+                'Horz' = round(mean(HorzBreak), 1),
+                'VAA' = round(mean(VertApprAngle), 1), 
+                'HAA' = round(mean(HorzApprAngle), 1),
+                'Axis' = round(mean(SpinAxis), 1),
+                'RelHeight' = round(mean(RelHeight), 1),
+                'RelSide' = round(mean(RelSide), 1),
+                'VRA' = round(mean(VertRelAngle), 1)) %>% 
+      select(Tilt, Count, Velo, Vert, Horz, VAA, HAA, VRA, Axis, RelHeight, RelSide)
+    
+    shape_table[is.na(shape_table)] = 0  
+    
+    tableFilter <- reactive({shape_table})
+    datatable(tableFilter(), options = list(dom = 't', pagelength = 12, columnDefs = list(list(targets = 0, visible = FALSE))))
+    
+    
+  })
+  
+
+  
+  session$onSessionEnded(function() { stopApp() })
+  
+}
+
+shinyApp(ui, server)
+
