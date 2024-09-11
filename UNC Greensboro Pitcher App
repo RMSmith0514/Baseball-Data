@@ -160,11 +160,6 @@ ui <- fluidPage(
                  dataTableOutput("Pitch_vs_Sides"), br(),
                  dataTableOutput("Results_vs_Sides"), br()
                  ),
-        tabPanel("Pitch Shapes", br(), fluidRow(
-          selectInput(inputId = "PitchInput12", label = "Select Pitch", 
-                      choices = sort(unique(Overall_Data_File$TaggedPitchType)))),
-          dataTableOutput('Shape_Table'), br(),
-        ),
         tabPanel("Whiff/HH Plots", br(),
                  selectInput(inputId = "SideInput22", label = "Select Hitter Side", 
                              choices = c(All = "All", sort(unique(Overall_Data_File$BatterSide)))), br(),
